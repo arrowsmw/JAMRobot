@@ -1,0 +1,461 @@
+GOALS:
+	ACHIEVE World_Model_Checked;
+FACTS:
+	FACT Robot_Pos 0 0;				//Robot X and Y Position.
+	FACT FinalX -1;					//Final X value to reach to complete search.
+	FACT Robot_Last_Pos 0 0;		//Previous position of Robot to return to.
+	FACT Rock -1 -1;			//Buffer to show rocks end here.
+	FACT Water_Rock -1 -1;		//Buffer to show water rocks end here.
+	FACT string "";				//temp string to hold strings to be parsed.
+	FACT initialized "False";		
+	FACT Rocks_Checked "False";		//Fact for checking if the goal is complete.
+	FACT Direction "Right";			//Fact for the robot direction.
+	FACT Speed 500;				//Default delay time.
+	FACT RP_Count 0;			//Counter 
+	FACT Base_Check 0;			//Flag for robot returning to base.
+	
+	
+OBSERVER:
+{
+	RETRIEVE initialized $VALUE;
+	WHEN : TEST(== $VALUE "False")
+	{
+		UPDATE (initialized)(initialized "True");
+	};
+}
+
+Plan: 								//The main plan of this Agent.
+{
+NAME: 
+	"Robot Demonstration"
+DOCUMENTATION: 
+	"Robot Demonstration"
+GOAL: 
+	ACHIEVE World_Model_Checked;
+BODY:
+
+	RETRIEVE Robot_Pos $X $Y;
+	RETRIEVE Direction $Dir;
+	RETRIEVE Rocks_Checked $Rocks;
+
+	PERFORM Initialized_Data;
+	RETRIEVE World_Border $wX $wY;
+	
+	WHILE : TEST(!= "True" $Rocks)				//While Rocks_Checked is false loop the find direction sub goal.
+	{					
+		PERFORM Find_Direction $X $Y $Dir;		//Finds new direction for the robot. This is the main subgoal.
+		RETRIEVE Rocks_Checked $Rocks;			//Updates rocks checked to ensure loop is still needed.	
+	};
+}
+
+Plan:
+{
+NAME:
+	"Initialize Data"							//Sets up important data for the agent.
+DOCUMENTATION:
+	"Initializes Data from Java Application"
+GOAL:
+	ACHIEVE Initialized_Data;
+BODY:
+
+	EXECUTE JamController.getCount;				//Gets number of rocks for later loop.
+	RETRIEVE Count $C;							
+	EXECUTE JamController.getWaterCount;		//Get number of water rocks.
+	RETRIEVE Water_Count $WC;					
+	EXECUTE JamController.getWorldBorder;		//Sets world border  to be string.
+	RETRIEVE string $s;
+	EXECUTE parseString $s;						//String is parsed to create World_Border FACT.
+	EXECUTE JamController.updateSpeed;
+	
+	
+	WHILE : TEST(!= 0 $C)						//Loops the creation of each rock FACT.
+	{
+		ASSIGN $C (- $C 1);
+		EXECUTE JamController.passRock $C;
+		RETRIEVE string $s;
+		EXECUTE parseString $s;
+	};
+	
+	WHILE : TEST(!= 0 $WC)						//Loops the creation of each water rock FACT.
+	{
+		ASSIGN $WC (- $WC 1);
+		EXECUTE JamController.passWaterRock $WC;
+		RETRIEVE string $s;
+		EXECUTE parseString $s;
+	};
+}
+
+
+
+
+Plan:
+{
+NAME:
+	"Print Position"
+DOCUMENTATION:
+	"Print Position"
+GOAL:
+	ACHIEVE Print_Pos $X $Y;
+BODY:
+
+	EXECUTE JamController.updatePos $X $Y;			//Prints position of the robot to the GUI.
+	
+}
+
+
+Plan:
+{
+NAME:
+	"Moving Left"
+DOCUMENTATION:
+	"Moving Left"
+GOAL:
+	ACHIEVE Pos_Left $X $Y;
+BODY:	
+
+		ASSIGN $X (- $X 1);							//This plan moves the robot left then encurs a delay of time "Speed".
+		PERFORM Print_Pos $X $Y;
+		EXECUTE JamController.updateSpeed;
+		EXECUTE UpdateX.MoveTo $X;					//Passes the X value to Data class.
+		EXECUTE UpdateY.MoveTo $Y;					//Passes the X value to Data class.
+		RETRIEVE Speed $S;
+		EXECUTE sleep $S;
+}
+
+Plan:
+{
+NAME:
+	"Moving Right"
+DOCUMENTATION:
+	"Moving Right"
+GOAL:
+	ACHIEVE Pos_Right $X $Y;						//Moves the robot to the right.
+BODY:
+
+		ASSIGN $X (+ $X 1);
+		PERFORM Print_Pos $X $Y;
+		EXECUTE JamController.updateSpeed;
+		EXECUTE UpdateX.MoveTo $X;					//Passes X value to Data class.
+		EXECUTE UpdateY.MoveTo $Y;					//Passes Y value to Data class.
+		RETRIEVE Speed $S;	
+		EXECUTE sleep $S;
+}
+
+Plan:
+{
+NAME: 
+	"Moving Up"
+DOCUMENTATION:
+	"Moving Up"
+GOAL:
+	ACHIEVE Pos_Up $X $Y;							//Moves the robot up.
+BODY:
+
+		ASSIGN $Y (+ $Y 1);
+		PERFORM Print_Pos $X $Y;
+		EXECUTE JamController.updateSpeed;
+		EXECUTE UpdateX.MoveTo $X;					//Passes X value to Data class.
+		EXECUTE UpdateY.MoveTo $Y;					//Passes Y value to Data class.
+		RETRIEVE Speed $S;
+		EXECUTE sleep $S;
+}
+
+Plan:
+{
+NAME: 
+	"Moving Down"
+DOCUMENTATION:
+	"Moving Down"
+GOAL:
+	ACHIEVE Pos_Down $X $Y;							//Moves the robot down.
+BODY:
+
+		ASSIGN $Y (- $Y 1);	
+		PERFORM Print_Pos $X $Y;
+		EXECUTE JamController.updateSpeed;
+		EXECUTE UpdateX.MoveTo $X;					//Passes X Value to data class.
+		EXECUTE UpdateY.MoveTo $Y;					//Passes Y value to data class.
+		RETRIEVE Speed $S;
+		EXECUTE sleep $S;
+}
+
+Plan:
+{
+NAME:
+	"Find Direction"
+DOCUMENTATION:
+	"Find Direction for the Robot"
+GOAL:
+	ACHIEVE Find_Direction $X $Y $Dir $fX;			//The main decision making subgoal.
+BODY:
+
+	RETRIEVE World_Border $wX $wY;
+	RETRIEVE RP_Count $RP;
+	RETRIEVEALL $Rocks Rock $RX $RY;				//Retrieves all instances of FACT Rock.
+	
+	NEXTFACT $Rocks Rock $RX $RY;			
+	RETRIEVE FinalX $fX;			
+	
+	
+	WHILE : TEST(> $RX -1)							//Checks rock has been added (-1 = buffer value);
+	{
+		WHEN : TEST(== $X $RX)						//Check for Rock at Position 
+		{
+			
+			WHEN : TEST(== $Y $RY)	
+			{
+				
+				RETRACT Rock $RX $RY;													//Remove rock fact if rock is found.
+				EXECUTE JamController.updateText "Rock found at current position\n";	//print to UI.
+				EXECUTE sleep 400;														//delay
+				EXECUTE JamController.updateText "Picking up rock\n";					//print to UI.
+				EXECUTE JamController.removeRock $X $Y;									//Removes the rock from Data class. Causes GUI to be updated with no rock.
+				EXECUTE sleep 400;														//delay
+				EXECUTE JamController.updateText "Analysing rock";						//print to UI.
+				EXECUTE sleep 400;														//delay
+				ASSIGN $RP 10;														
+				
+				WHILE : TEST(!= 0 $RP)													//delayed "...." 
+				{
+					EXECUTE JamController.updateText ".";
+					EXECUTE sleep 40;
+					ASSIGN $RP (- $RP 1);												//decrement counter.
+				};
+				
+				PERFORM Check_Rock $X $Y;												//perform Check_Rock subgoal.
+				
+			};
+			
+			
+			
+		};
+		
+		
+		
+		NEXTFACT $Rocks Rock $RX $RY;		//Check next rock.
+	};
+		
+		
+	OR
+	{
+		TEST(== (% $wY 2) 0);		//Checks for even Y border.
+		ASSIGN $fX $wX;				//Sets final x pos to be x border since Y border is even.
+	}
+	{
+		TEST(== (% $wY 2) 1);		//Checks for odd Y border.
+		ASSIGN $fX 0;				//Sets final X pos to be 0 since Y is odd.
+	};
+		
+
+	
+		
+		
+		
+
+	WHEN : TEST(== $X $fX)			//When final position on the grid is reached.
+	{
+		WHILE : TEST(== $Y $wY)		
+		{
+					
+			EXECUTE JamController.updateText "Robot has reached final area. All rocks checked. Returning Home.\n";		//Prints to GUI.
+			EXECUTE sleep 1000;
+			PERFORM Return_Final $X $Y $Dir;			//Moves to subgoal Return_Final.
+		};
+	};
+		
+	OR								//Directional actions depending on the current value of $Dir. This allows the robot to retain its direction after returning to base.
+	{
+		TEST(== "Left" $Dir);		//If robot just moved left and hit the x border move up.
+		TEST(==0 $X);
+		ASSIGN $Dir "Up";
+		PERFORM Pos_Up $X $Y;
+	}
+	{
+		
+		TEST(== "Right" $Dir);		//If robot just moved right and hit x border move up.
+		TEST(== $wX $X);
+		ASSIGN $Dir "Up";
+		PERFORM Pos_Up $X $Y;
+	}
+	{
+		TEST(== "Up" $Dir);
+		OR
+		{
+			TEST(== 0 $X);
+			ASSIGN $Dir "Right";
+			PERFORM Pos_Right $X $Y;
+		}
+		{
+			TEST(== $wX $X);
+			ASSIGN $Dir "Left";
+			PERFORM Pos_Left $X $Y;
+		};
+	}
+	{
+		TEST(== "Right" $Dir);
+		PERFORM Pos_Right $X $Y;
+	}
+	{
+		TEST (== "Left" $Dir);	
+		PERFORM Pos_Left $X $Y;
+	}
+	{
+		TEST(== "Up" $Dir);
+		PERFORM Pos_Up $X $Y;
+	}
+	{
+		TEST(== "Down" $Dir);
+		PERFORM Pos_Down $X $Y;
+	};
+	
+}
+
+Plan:
+{
+NAME: 
+	"Checking Rock"
+DOCUMENTATION:
+	"Checking Rock"
+GOAL:
+	ACHIEVE Check_Rock $X $Y;						//Subgoal to check if a rock contains water.
+BODY:												//This goal is only began when a rock is already found. 
+
+	RETRIEVE Base_Check $B;	
+	RETRIEVEALL $wrocks Water_Rock $WX $WY;			//Retrieves all water rock FACTS.
+	NEXTFACT $wrocks Water_Rock $WX $WY;
+	EXECUTE JamController.getWaterCount;
+	RETRIEVE Water_Count $WC;
+	
+	
+	
+	WHILE : TEST(> $WX -1)							//While water rock x and y are not -1 (Buffer value).
+	{
+		WHEN : TEST(== $X $WX)
+		{
+			WHEN : TEST(== $Y $WY)
+			{
+				RETRACT Water_Rock $WX $WY;														//Remove the water rock.
+				EXECUTE JamController.updateText "\nWater found at current position.\n";		//print to GUI.
+				EXECUTE JamController.foundWater $X $Y;											//Sets the current water rock to be carried by the robot to the base.
+				EXECUTE sleep 1000;
+				EXECUTE JamController.updateText "Returning to base with water.\n";
+				EXECUTE sleep 1000;
+				PERFORM Return_To_Base $X $Y;													//Begins the return to base subgoal.
+				ASSIGN $B 1;
+			};
+		};
+		NEXTFACT $wrocks Water_Rock $WX $WY;											//Moves to next instance of Water_Rock.
+		
+	};
+	
+
+	WHEN : TEST(== $B 0)			//If base flag is not set that means the rock found did not contain water.
+	{
+		EXECUTE JamController.updateText "\nRock does not contain water.\n";			//And so these messages are printed to the GUI.
+		EXECUTE sleep 1000;																//Dramatic Pause.
+		EXECUTE JamController.updateText "Continuing search.\n";
+		EXECUTE sleep 1000;
+	};	
+}
+
+Plan:
+{
+NAME: 
+	"Returning to Base"						
+DOCUMENTATION:
+	"Robot Returns to Base"
+GOAL:	
+	ACHIEVE Return_To_Base $X $Y;					//Return to base goal. This is called when a water rock is found.
+BODY:
+	
+	RETRIEVE Robot_Last_Pos $lX $lY;
+	
+	
+	ASSIGN $lX $X;									//Sets previous X and Y to be current so the robot can return later.
+	ASSIGN $lY $Y;
+	
+	WHILE : TEST(!= 0 $Y)							//While the robot is not at base.
+	{
+		PERFORM Pos_Down $X $Y;						//Move towards base.
+	};
+	
+	WHILE : TEST(!= 0 $X)							//Move towards base.
+	{
+		PERFORM Pos_Left $X $Y;
+	};
+	
+	WHEN : TEST(== 0 $X)							//When robot is at base.
+	{
+		WHEN : TEST(== 0 $Y)
+		{
+			EXECUTE JamController.updateText "Robot returned Home.\n";		//Print to screen. 
+			EXECUTE sleep 500;												//Water rock is dropped off at this point (Handled by UI class)
+			EXECUTE JamController.updateText "Dropping off water.\n";
+			EXECUTE sleep 500;
+			
+			
+		};
+	};
+	
+	EXECUTE JamController.updateText "Returning to previous position.\n";	//Print to screen.
+	EXECUTE sleep 1000;
+	PERFORM Return_To_Previous $X $Y $lX $lY;								//Calls return to previous subgoal , passing previous x and y along with current.
+}
+
+Plan:
+{
+NAME:
+	"Return To Previous"
+DOCUMENTATION:
+	"Robot Returns to previous position"
+GOAL:
+	ACHIEVE Return_To_Previous $X $Y $lX $lY;								//This subgoal returns the robot to its previous position on the grid.
+BODY:
+
+	WHILE : TEST(!= $X $lX)									//While robot has not yet returned. 										
+	{
+		PERFORM Pos_Right $X $Y;							//Move towards.
+	};
+	
+	WHILE : TEST(!= $Y $lY)									//Move towards previous positon.
+	{
+		PERFORM Pos_Up $X $Y;
+	};
+}
+
+Plan:
+{
+NAME: 
+	"Final Return To Base"
+DOCUMENTATION:
+	"Robot Returns To Base To Complete Mission"
+GOAL:
+	ACHIEVE Return_Final $X $Y $Dir;						//Return final subgoal. This is the final subgoal needed to complete the top-level goal.
+BODY:														//This goal will only be called to when all sections of the grid have been checked for rocks.
+	
+	
+
+	
+	WHILE : TEST(!=0 $Y)					//While not at base.
+	{
+		PERFORM Pos_Down $X $Y;				//Move towards base.
+	};
+	
+	WHILE : TEST(!= 0 $X)					//While not at base.
+	{
+		PERFORM Pos_Left $X $Y;				//Move towards base.
+	};
+	
+	WHEN : TEST(== 0 $X)
+	{
+		WHEN : TEST(== 0 $Y)				//When at base.
+		{
+			EXECUTE JamController.updateText "Robot Arrived at base and is shutting down.\n Mission Completed!";			//Print to Screen.
+			UPDATE(Rocks_Checked)(Rocks_Checked "True");																	//Sets flag for top level goal completion to true.
+			ASSIGN $Dir "None";																								//Sets direction flag to none to avoid unwanted movement while Find_Direction subgoal completes.
+		};
+	};
+	
+	
+	
+}
